@@ -78,18 +78,26 @@ var os = require('os');
 var request = require('request');
 
 var controller = Botkit.slackbot({
-    debug: true,
+    debug: false
 });
 
 var bot = controller.spawn({
     token: process.env.token
 }).startRTM();
 
-controller.hears
-var url_regex = '(https?:\/\/(?:www\.|(?!www))[^\s\.]+\.[^\s]{2,}|www\.[^\s]+\.[^\s]{2,})'
-controller.hears([url_regex], 'ambient', function(bot, message) {
-    var matches = message.text.match(/(https?:\/\/(?:www\.|(?!www))[^\s\.]+\.[^\s]{2,}|www\.[^\s]+\.[^\s]{2,})/ig)
-    var url = matches[0].substr(0, matches[0].length - 1)
+function matchURL(text) {
+    var matches = text.match(/(https?:\/\/(?:www\.|(?!www))[^\s\.]+\.[^\s]{2,}|www\.[^\s]+\.[^\s]{2,})/ig)
+    return (!matches || matches.length == 0)? undefined: matches[0].substr(0, matches[0].length - 1);
+}
+
+function summarizeURL(bot, message, channel, requesting_user) {
+    var url = matchURL(message.text);
+    if (!url) {
+        console.log('No URL');
+        return;
+    }
+
+    console.log('MESSAGE: ' + JSON.stringify(message));
     var api_url = 'http://api.smmry.com/&SM_LENGTH=5&SM_WITH_BREAK&SM_QUOTE_AVOID&SM_API_KEY=' + process.env.SMRRY_TOKEN + '&SM_URL=' + url
     request.post(api_url, function(error, response, body) {
         if (error) {
@@ -99,7 +107,7 @@ controller.hears([url_regex], 'ambient', function(bot, message) {
         else {
             var data = JSON.parse(body);
             var title = data['sm_api_title'].replace(/\\"/g, '"').replace(/\\'/g, "'");
-            var bot_text = 'Here\'s a TL;DR for "' + title + '" (requested by <@' + message.user + '>)';
+            var bot_text = 'Here\'s a TL;DR for "' + title + '" (requested by <@' + requesting_user + '>)';
             var summary = data['sm_api_content'];
             var sentences = summary.split('[BREAK]');
             var attachments = [];
@@ -112,9 +120,43 @@ controller.hears([url_regex], 'ambient', function(bot, message) {
             bot.say({
                 text: bot_text,
                 attachments: attachments,
-                channel: message.channel
+                channel: channel
             });
         }
+    });
+}
+
+controller.on('reaction_added', function(bot, message) {
+    console.log(message);
+    if (message.reaction != 'robot_face' || message.item.type != 'message') {
+        return;
+    }
+
+    bot.api.reactions.list({'user': message.user, count: 2}, function(err, response) {
+        if (err) {
+            console.log('Slack reaction got error: ' + err);
+            return;
+        }
+
+        for (var i = 0; i < response.items.length; i++) {
+            var item = response.items[i];
+            if (item.type == 'message' &&
+                item.channel == message.item.channel) {
+                var reaction_message = item.message;
+                var reactions = reaction_message.reactions;
+                console.log('GOT REACTION MESSAGE');
+                for (var j = 0; j < reactions.length; j++) {
+                    var reaction = reactions[j];
+                    console.log('REACTION: ' + JSON.stringify(reaction));
+                    if (reaction.name == 'robot_face' && reaction.count == 1) {
+                        summarizeURL(bot, reaction_message, item.channel, message.user);
+                        return;
+                    }
+                }
+            }
+
+        }
+        console.log(response);
     });
 });
 
