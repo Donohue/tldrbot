@@ -76,6 +76,17 @@ else if (!process.env.SMRRY_TOKEN) {
 var Botkit = require('./lib/Botkit.js');
 var os = require('os');
 var request = require('request');
+var http = require('http');
+
+function handleRequest(request, response) {
+    response.end('It works!');
+}
+
+var port = process.env.PORT? process.env.PORT: 8080;
+var server = http.createServer(handleRequest);
+server.listen(port, function() {
+    console.log('Dummy HTTP server setup');
+});
 
 var controller = Botkit.slackbot({
     debug: false
