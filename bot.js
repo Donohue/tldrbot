@@ -122,7 +122,7 @@ function summarizeURL(bot, message, channel, requesting_user) {
             var summary = data['sm_api_content'];
             var sentences = summary.split('[BREAK]');
             var attachments = [];
-            for (var i = 0; i < sentences.length; i++) {
+            for (var i = 0; i < sentences.length - 1; i++) {
                 attachments.push({
                     text: sentences[i]
                 });
